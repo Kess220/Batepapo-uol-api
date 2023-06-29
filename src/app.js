@@ -4,12 +4,13 @@ const Joi = require("joi");
 const dayjs = require("dayjs");
 const cors = require("cors");
 const { MongoClient } = require("mongodb");
+require("dotenv").config();
 
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
 
-const mongoClient = new MongoClient("mongodb://127.0.0.1:27017/aulas");
+const mongoClient = new MongoClient(process.env.MONGODB_URI);
 let db;
 let participantsCollection;
 let messagesCollection;
