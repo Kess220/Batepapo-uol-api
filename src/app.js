@@ -137,7 +137,7 @@ app.post("/messages", (req, res) => {
     .findOne({ name: from })
     .then((participant) => {
       if (!participant) {
-        return res.status(422).json({ error: "Usuário não cadastrado." });
+        return res.status(404).json({ error: "Usuário não cadastrado." });
       }
 
       const newMessage = {
