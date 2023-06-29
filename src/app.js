@@ -20,12 +20,12 @@ mongoClient
     db = mongoClient.db();
     participantsCollection = db.collection("participants");
     messagesCollection = db.collection("messages");
+
     console.log("Connected to MongoDB");
   })
   .catch((err) => console.log(err.message));
 
-// POST /participants
-app.post("/participants", (req, res) => {
+app.post("/participants", async (req, res) => {
   const { name } = req.body;
 
   const schema = Joi.object({
@@ -40,20 +40,26 @@ app.post("/participants", (req, res) => {
       .json({ error: "O nome é obrigatório e deve ser uma string não vazia." });
   }
 
-  const newParticipant = {
-    name,
-    lastStatus: Date.now(),
-  };
+  try {
+    const existingParticipant = await participantsCollection.findOne({ name });
+    if (existingParticipant) {
+      return res
+        .status(409)
+        .json({ error: "O nome de participante já está sendo usado." });
+    }
 
-  participantsCollection
-    .insertOne(newParticipant)
-    .then(() => {
-      return res.status(201).json(newParticipant);
-    })
-    .catch((err) => {
-      console.error("Error creating participant:", err);
-      return res.status(500).json({ error: "Erro ao criar participante." });
-    });
+    const newParticipant = {
+      name,
+      lastStatus: Date.now(),
+    };
+
+    await participantsCollection.insertOne(newParticipant);
+
+    return res.status(201).json(newParticipant);
+  } catch (err) {
+    console.error("Error creating participant:", err);
+    return res.status(500).json({ error: "Erro ao criar participante." });
+  }
 });
 
 // POST /messages
