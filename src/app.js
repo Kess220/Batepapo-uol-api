@@ -51,6 +51,7 @@ const removerParticipantesInativos = async () => {
         };
 
         await messagesCollection.insertOne(novaMensagem);
+        await participantsCollection.deleteOne({ name: participante.name });
       }
     }
   } catch (erro) {
