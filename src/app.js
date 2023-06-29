@@ -10,7 +10,7 @@ const app = express();
 app.use(bodyParser.json());
 app.use(cors());
 
-const mongoClient = new MongoClient(process.env.MONGODB_URI);
+const mongoClient = new MongoClient(process.env.DATABASE_URL);
 let db;
 let participantsCollection;
 let messagesCollection;
@@ -171,7 +171,7 @@ app.get("/messages", (req, res) => {
     });
 });
 
-const port = process.env.PORT || 5000;
+const port = process.env.PORT;
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
