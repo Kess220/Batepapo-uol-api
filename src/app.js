@@ -26,6 +26,7 @@ mongoClient
   })
   .catch((err) => console.log(err.message));
 
+// GET /participants
 app.post("/participants", async (req, res) => {
   const { name } = req.body;
 
@@ -56,6 +57,16 @@ app.post("/participants", async (req, res) => {
 
     await participantsCollection.insertOne(newParticipant);
 
+    const newMessage = {
+      from: name,
+      to: "Todos",
+      text: "entra na sala...",
+      type: "status",
+      time: dayjs().format("HH:mm:ss"),
+    };
+
+    await messagesCollection.insertOne(newMessage);
+
     return res.status(201).json(newParticipant);
   } catch (err) {
     console.error("Error creating participant:", err);
@@ -80,22 +91,40 @@ app.post("/messages", (req, res) => {
     return res.status(422).json({ error: "Parâmetros inválidos." });
   }
 
-  const newMessage = {
-    from,
-    to,
-    text,
-    type,
-    time: dayjs().format("HH:mm:ss"),
-  };
+  if (!from) {
+    return res
+      .status(422)
+      .json({ error: "Campo 'User' não está presente no header." });
+  }
 
-  messagesCollection
-    .insertOne(newMessage)
-    .then(() => {
-      return res.status(201).json(newMessage);
+  participantsCollection
+    .findOne({ name: from })
+    .then((participant) => {
+      if (!participant) {
+        return res.status(422).json({ error: "Usuário não cadastrado." });
+      }
+
+      const newMessage = {
+        from,
+        to,
+        text,
+        type,
+        time: dayjs().format("HH:mm:ss"),
+      };
+
+      messagesCollection
+        .insertOne(newMessage)
+        .then(() => {
+          return res.status(201).json(newMessage);
+        })
+        .catch((err) => {
+          console.error("Error creating message:", err);
+          return res.status(500).json({ error: "Erro ao criar mensagem." });
+        });
     })
     .catch((err) => {
-      console.error("Error creating message:", err);
-      return res.status(500).json({ error: "Erro ao criar mensagem." });
+      console.error("Error finding participant:", err);
+      return res.status(500).json({ error: "Erro ao buscar participante." });
     });
 });
 
@@ -141,33 +170,45 @@ app.get("/messages", (req, res) => {
     return res.status(401).json({ error: "Usuário não autenticado." });
   }
 
-  let query = {
-    $or: [
-      { to: participantName },
-      { from: participantName },
-      { to: "Todos" },
-      { type: "message" },
-    ],
-  };
+  participantsCollection
+    .findOne({ name: participantName })
+    .then((participant) => {
+      if (!participant) {
+        return res.status(422).json({ error: "Usuário não cadastrado." });
+      }
 
-  if (limit) {
-    const parsedLimit = parseInt(limit);
-    if (isNaN(parsedLimit) || parsedLimit <= 0) {
-      return res.status(422).json({ error: "Parâmetro 'limit' inválido." });
-    }
-    query = messagesCollection.find(query).limit(parsedLimit);
-  } else {
-    query = messagesCollection.find(query);
-  }
+      let query = {
+        $or: [
+          { to: participantName },
+          { from: participantName },
+          { to: "Todos" },
+          { type: "message" },
+        ],
+      };
 
-  query
-    .toArray()
-    .then((messages) => {
-      return res.status(200).json(messages);
+      if (limit) {
+        const parsedLimit = parseInt(limit);
+        if (isNaN(parsedLimit) || parsedLimit <= 0) {
+          return res.status(422).json({ error: "Parâmetro 'limit' inválido." });
+        }
+        query = messagesCollection.find(query).limit(parsedLimit);
+      } else {
+        query = messagesCollection.find(query);
+      }
+
+      query
+        .toArray()
+        .then((messages) => {
+          return res.status(200).json(messages);
+        })
+        .catch((err) => {
+          console.error("Error retrieving messages:", err);
+          return res.status(500).json({ error: "Erro ao obter mensagens." });
+        });
     })
     .catch((err) => {
-      console.error("Error retrieving messages:", err);
-      return res.status(500).json({ error: "Erro ao obter mensagens." });
+      console.error("Error finding participant:", err);
+      return res.status(500).json({ error: "Erro ao buscar participante." });
     });
 });
 
