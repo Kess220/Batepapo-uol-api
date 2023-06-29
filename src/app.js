@@ -151,13 +151,28 @@ app.post("/status", (req, res) => {
   }
 
   participantsCollection
-    .updateOne({ name: participantName }, { $set: { lastStatus: Date.now() } })
-    .then(() => {
-      return res.status(200).send();
+    .findOne({ name: participantName })
+    .then((participant) => {
+      if (!participant) {
+        return res.status(404).json({ error: "Usuário não encontrado." });
+      }
+
+      participantsCollection
+        .updateOne(
+          { name: participantName },
+          { $set: { lastStatus: Date.now() } }
+        )
+        .then(() => {
+          return res.status(200).send();
+        })
+        .catch((err) => {
+          console.error("Error updating participant status:", err);
+          return res.status(500).json({ error: "Erro ao atualizar status." });
+        });
     })
     .catch((err) => {
-      console.error("Error updating participant status:", err);
-      return res.status(500).json({ error: "Erro ao atualizar status." });
+      console.error("Error finding participant:", err);
+      return res.status(500).json({ error: "Erro ao buscar participante." });
     });
 });
 
