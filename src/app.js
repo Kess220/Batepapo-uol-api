@@ -26,6 +26,42 @@ mongoClient
   })
   .catch((err) => console.log(err.message));
 
+const removeInactiveParticipants = async () => {
+  const tenSecondsAgo = Date.now() - 10000;
+
+  try {
+    const result = await participantsCollection.deleteMany({
+      lastStatus: { $lt: tenSecondsAgo },
+    });
+
+    const { deletedCount } = result;
+    if (deletedCount > 0) {
+      const removedParticipants = await participantsCollection
+        .find({ lastStatus: { $lt: tenSecondsAgo } })
+        .toArray();
+
+      const removeMessage = {
+        from: "Servidor",
+        to: "Todos",
+        text: "sai da sala...",
+        type: "status",
+        time: dayjs().format("HH:mm:ss"),
+      };
+
+      for (const participant of removedParticipants) {
+        removeMessage.from = participant.name;
+        await messagesCollection.insertOne(removeMessage);
+      }
+
+      console.log(`Removed ${deletedCount} inactive participant(s).`);
+    }
+  } catch (err) {
+    console.error("Error removing inactive participants:", err);
+  }
+};
+
+setInterval(removeInactiveParticipants, 15000);
+
 // GET /participants
 app.post("/participants", async (req, res) => {
   const { name } = req.body;
@@ -151,28 +187,40 @@ app.post("/status", (req, res) => {
   }
 
   participantsCollection
-    .findOne({ name: participantName })
-    .then((participant) => {
-      if (!participant) {
-        return res.status(404).json({ error: "Usuário não encontrado." });
-      }
-
+    .updateOne({ name: participantName }, { $set: { lastStatus: Date.now() } })
+    .then(() => {
+      // Verificar se o participante saiu da sala
       participantsCollection
-        .updateOne(
-          { name: participantName },
-          { $set: { lastStatus: Date.now() } }
-        )
-        .then(() => {
-          return res.status(200).send();
+        .findOne({ name: participantName })
+        .then((participant) => {
+          if (!participant) {
+            const newMessage = {
+              from: participantName,
+              to: "Todos",
+              text: "saiu da sala...",
+              type: "status",
+              time: dayjs().format("HH:mm:ss"),
+            };
+
+            messagesCollection
+              .insertOne(newMessage)
+              .then(() => {
+                console.log("Mensagem enviada ao sair da sala:", newMessage);
+              })
+              .catch((err) => {
+                console.error("Erro ao enviar mensagem:", err);
+              });
+          }
         })
         .catch((err) => {
-          console.error("Error updating participant status:", err);
-          return res.status(500).json({ error: "Erro ao atualizar status." });
+          console.error("Erro ao encontrar participante:", err);
         });
+
+      return res.status(200).send();
     })
     .catch((err) => {
-      console.error("Error finding participant:", err);
-      return res.status(500).json({ error: "Erro ao buscar participante." });
+      console.error("Erro ao atualizar status do participante:", err);
+      return res.status(500).json({ error: "Erro ao atualizar status." });
     });
 });
 
