@@ -1,12 +1,13 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const Joi = require("joi");
-const dayjs = require("dayjs");
-const cors = require("cors");
-const { MongoClient, ObjectId } = require("mongodb");
-const { stripHtml } = require("string-strip-html");
+import express from "express";
+import bodyParser from "body-parser";
+import Joi from "joi";
+import dayjs from "dayjs";
+import cors from "cors";
+import { MongoClient, ObjectId } from "mongodb";
+import { stripHtml } from "string-strip-html";
 
-require("dotenv").config();
+import dotenv from "dotenv";
+dotenv.config();
 
 const app = express();
 app.use(bodyParser.json());
@@ -63,18 +64,15 @@ const removerParticipantesInativos = async () => {
 
 setInterval(removerParticipantesInativos, 15000);
 
-// POST /participants
+/// POST /participants
 app.post("/participants", async (req, res) => {
-  const { name } = req.body;
-
-  // Sanitize the name input
-  const sanitizedName = stripHtml(name).result.trim();
+  let { name } = req.body;
 
   const schema = Joi.object({
     name: Joi.string().trim().required(),
   });
 
-  const { error } = schema.validate({ name: sanitizedName });
+  const { error } = schema.validate({ name });
 
   if (error) {
     return res
@@ -82,10 +80,11 @@ app.post("/participants", async (req, res) => {
       .json({ error: "O nome é obrigatório e deve ser uma string não vazia." });
   }
 
+  // Sanitiza o nome do participante
+  name = sanitizeMessageText(name);
+
   try {
-    const existingParticipant = await participantsCollection.findOne({
-      name: sanitizedName,
-    });
+    const existingParticipant = await participantsCollection.findOne({ name });
     if (existingParticipant) {
       return res
         .status(409)
@@ -93,14 +92,14 @@ app.post("/participants", async (req, res) => {
     }
 
     const newParticipant = {
-      name: sanitizedName,
+      name,
       lastStatus: Date.now(),
     };
 
     await participantsCollection.insertOne(newParticipant);
 
     const newMessage = {
-      from: sanitizedName,
+      from: name,
       to: "Todos",
       text: "entra na sala...",
       type: "status",
@@ -111,12 +110,13 @@ app.post("/participants", async (req, res) => {
 
     return res.status(201).json(newParticipant);
   } catch (err) {
-    return res.status(500).json({ error: "Erro ao adicionar participante." });
+    console.error("Error creating participant:", err);
+    return res.status(500).json({ error: "Erro ao criar participante." });
   }
 });
 
 // POST /messages
-app.post("/messages", (req, res) => {
+app.post("/messages", async (req, res) => {
   const { to, text, type } = req.body;
   const from = req.header("User");
 
@@ -138,35 +138,30 @@ app.post("/messages", (req, res) => {
       .json({ error: "Campo 'User' não está presente no header." });
   }
 
-  participantsCollection
-    .findOne({ name: from })
-    .then((participant) => {
-      if (!participant) {
-        return res.status(422).json({ error: "Usuário não cadastrado." });
-      }
+  // Sanitiza o texto da mensagem
+  const sanitizedText = sanitizeMessageText(text);
 
-      const newMessage = {
-        from,
-        to,
-        text,
-        type,
-        time: dayjs().format("HH:mm:ss"),
-      };
+  try {
+    const participant = await participantsCollection.findOne({ name: from });
+    if (!participant) {
+      return res.status(422).json({ error: "Usuário não cadastrado." });
+    }
 
-      messagesCollection
-        .insertOne(newMessage)
-        .then(() => {
-          return res.status(201).json(newMessage);
-        })
-        .catch((err) => {
-          console.error("Error creating message:", err);
-          return res.status(500).json({ error: "Erro ao criar mensagem." });
-        });
-    })
-    .catch((err) => {
-      console.error("Error finding participant:", err);
-      return res.status(500).json({ error: "Erro ao buscar participante." });
-    });
+    const newMessage = {
+      from,
+      to,
+      text: sanitizedText,
+      type,
+      time: dayjs().format("HH:mm:ss"),
+    };
+
+    await messagesCollection.insertOne(newMessage);
+
+    return res.status(201).json(newMessage);
+  } catch (err) {
+    console.error("Error creating message:", err);
+    return res.status(500).json({ error: "Erro ao criar mensagem." });
+  }
 });
 
 // GET /participants
@@ -320,15 +315,15 @@ app.delete("/messages/:messageId", (req, res) => {
     });
 });
 
-// Para que serve tantos códigos?
-// Se a vida não é programada
-// e as melhores coisas da vida não tem lógica
-
-// PUT /messages/:messageId
+/// PUT /messages/:messageId
 app.put("/messages/:messageId", (req, res) => {
   const messageId = req.params.messageId;
   const { to, text, type } = req.body;
   const from = req.header("User");
+
+  // Para que serve tantos códigos?
+  // Se a vida não é programada
+  // e as melhores coisas da vida não tem lógica
 
   const schema = Joi.object({
     to: Joi.string().trim().required(),
