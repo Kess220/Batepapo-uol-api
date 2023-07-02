@@ -315,6 +315,83 @@ app.delete("/messages/:messageId", (req, res) => {
     });
 });
 
+// PUT /messages/:messageId
+app.put("/messages/:messageId", (req, res) => {
+  const messageId = req.params.messageId;
+  const { to, text, type } = req.body;
+  const from = req.header("User");
+
+  const schema = Joi.object({
+    to: Joi.string().trim().required(),
+    text: Joi.string().trim().required(),
+    type: Joi.string().valid("message", "private_message").required(),
+  });
+
+  const { error } = schema.validate({ to, text, type });
+
+  if (error) {
+    return res.status(422).json({ error: "Parâmetros inválidos." });
+  }
+
+  if (!from) {
+    return res
+      .status(422)
+      .json({ error: "Campo 'User' não está presente no header." });
+  }
+
+  participantsCollection
+    .findOne({ name: from })
+    .then((participant) => {
+      if (!participant) {
+        return res.status(404).json({ error: "Usuário não encontrado." });
+      }
+
+      messagesCollection
+        .findOne({ _id: new ObjectId(messageId) })
+        .then((message) => {
+          if (!message) {
+            return res.status(404).json({ error: "Mensagem não encontrada." });
+          }
+
+          if (message.from !== participant.name) {
+            return res
+              .status(401)
+              .json({ error: "Usuário não é o proprietário da mensagem." });
+          }
+
+          const updatedMessage = {
+            ...message,
+            to,
+            text,
+            type,
+          };
+
+          messagesCollection
+            .updateOne(
+              { _id: new ObjectId(messageId) },
+              { $set: updatedMessage }
+            )
+            .then(() => {
+              return res.status(200).json(updatedMessage);
+            })
+            .catch((err) => {
+              console.error("Error updating message:", err);
+              return res
+                .status(500)
+                .json({ error: "Erro ao atualizar mensagem." });
+            });
+        })
+        .catch((err) => {
+          console.error("Error finding message:", err);
+          return res.status(500).json({ error: "Erro ao buscar mensagem." });
+        });
+    })
+    .catch((err) => {
+      console.error("Error finding participant:", err);
+      return res.status(500).json({ error: "Erro ao buscar participante." });
+    });
+});
+
 const port = process.env.PORT;
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
