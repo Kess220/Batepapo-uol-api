@@ -295,7 +295,7 @@ app.delete("/messages/:messageId", (req, res) => {
           messagesCollection
             .deleteOne({ _id: new ObjectId(messageId) })
             .then(() => {
-              return res.status(204).send();
+              return res.status(200).send();
             })
             .catch((err) => {
               console.error("Error deleting message:", err);
