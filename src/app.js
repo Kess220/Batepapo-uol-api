@@ -4,6 +4,7 @@ const Joi = require("joi");
 const dayjs = require("dayjs");
 const cors = require("cors");
 const { MongoClient, ObjectId } = require("mongodb");
+const { stripHtml } = require("string-strip-html");
 
 require("dotenv").config();
 
@@ -62,15 +63,18 @@ const removerParticipantesInativos = async () => {
 
 setInterval(removerParticipantesInativos, 15000);
 
-// GET /participants
+// POST /participants
 app.post("/participants", async (req, res) => {
   const { name } = req.body;
+
+  // Sanitize the name input
+  const sanitizedName = stripHtml(name).result.trim();
 
   const schema = Joi.object({
     name: Joi.string().trim().required(),
   });
 
-  const { error } = schema.validate({ name });
+  const { error } = schema.validate({ name: sanitizedName });
 
   if (error) {
     return res
@@ -79,7 +83,9 @@ app.post("/participants", async (req, res) => {
   }
 
   try {
-    const existingParticipant = await participantsCollection.findOne({ name });
+    const existingParticipant = await participantsCollection.findOne({
+      name: sanitizedName,
+    });
     if (existingParticipant) {
       return res
         .status(409)
@@ -87,14 +93,14 @@ app.post("/participants", async (req, res) => {
     }
 
     const newParticipant = {
-      name,
+      name: sanitizedName,
       lastStatus: Date.now(),
     };
 
     await participantsCollection.insertOne(newParticipant);
 
     const newMessage = {
-      from: name,
+      from: sanitizedName,
       to: "Todos",
       text: "entra na sala...",
       type: "status",
@@ -105,8 +111,7 @@ app.post("/participants", async (req, res) => {
 
     return res.status(201).json(newParticipant);
   } catch (err) {
-    console.error("Error creating participant:", err);
-    return res.status(500).json({ error: "Erro ao criar participante." });
+    return res.status(500).json({ error: "Erro ao adicionar participante." });
   }
 });
 
@@ -314,6 +319,10 @@ app.delete("/messages/:messageId", (req, res) => {
       return res.status(500).json({ error: "Erro ao buscar participante." });
     });
 });
+
+// Para que serve tantos códigos?
+// Se a vida não é programada
+// e as melhores coisas da vida não tem lógica
 
 // PUT /messages/:messageId
 app.put("/messages/:messageId", (req, res) => {
