@@ -3,7 +3,8 @@ const bodyParser = require("body-parser");
 const Joi = require("joi");
 const dayjs = require("dayjs");
 const cors = require("cors");
-const { MongoClient } = require("mongodb");
+const { MongoClient, ObjectId } = require("mongodb");
+
 require("dotenv").config();
 
 const app = express();
@@ -254,6 +255,58 @@ app.get("/messages", (req, res) => {
         .catch((err) => {
           console.error("Error retrieving messages:", err);
           return res.status(500).json({ error: "Erro ao obter mensagens." });
+        });
+    })
+    .catch((err) => {
+      console.error("Error finding participant:", err);
+      return res.status(500).json({ error: "Erro ao buscar participante." });
+    });
+});
+
+// DELETE /messages/:messageId
+app.delete("/messages/:messageId", (req, res) => {
+  const participantName = req.header("User");
+  const messageId = req.params.messageId;
+
+  if (!participantName) {
+    return res.status(401).json({ error: "Usuário não autenticado." });
+  }
+
+  participantsCollection
+    .findOne({ name: participantName })
+    .then((participant) => {
+      if (!participant) {
+        return res.status(404).json({ error: "Usuário não encontrado." });
+      }
+
+      messagesCollection
+        .findOne({ _id: new ObjectId(messageId) })
+        .then((message) => {
+          if (!message) {
+            return res.status(404).json({ error: "Mensagem não encontrada." });
+          }
+
+          if (message.from !== participantName) {
+            return res
+              .status(401)
+              .json({ error: "Usuário não é o proprietário da mensagem." });
+          }
+
+          messagesCollection
+            .deleteOne({ _id: new ObjectId(messageId) })
+            .then(() => {
+              return res.status(204).send();
+            })
+            .catch((err) => {
+              console.error("Error deleting message:", err);
+              return res
+                .status(500)
+                .json({ error: "Erro ao deletar mensagem." });
+            });
+        })
+        .catch((err) => {
+          console.error("Error finding message:", err);
+          return res.status(500).json({ error: "Erro ao buscar mensagem." });
         });
     })
     .catch((err) => {

@@ -18,6 +18,7 @@
     "joi": "^17.9.2",
     "mongodb": "^5.6.0",
     "mongoose": "^7.3.1",
-    "mongose": "^0.0.2-security"
+    "mongose": "^0.0.2-security",
+    "string-strip-html": "^13.4.1"
   }
 }
