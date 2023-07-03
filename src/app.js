@@ -4,7 +4,6 @@ import Joi from "joi";
 import dayjs from "dayjs";
 import cors from "cors";
 import { MongoClient, ObjectId } from "mongodb";
-import { stripHtml } from "string-strip-html";
 
 import dotenv from "dotenv";
 dotenv.config();
@@ -64,9 +63,9 @@ const removerParticipantesInativos = async () => {
 
 setInterval(removerParticipantesInativos, 15000);
 
-/// POST /participants
+// GET /participants
 app.post("/participants", async (req, res) => {
-  let { name } = req.body;
+  const { name } = req.body;
 
   const schema = Joi.object({
     name: Joi.string().trim().required(),
@@ -79,9 +78,6 @@ app.post("/participants", async (req, res) => {
       .status(422)
       .json({ error: "O nome é obrigatório e deve ser uma string não vazia." });
   }
-
-  // Sanitiza o nome do participante
-  name = sanitizeMessageText(name);
 
   try {
     const existingParticipant = await participantsCollection.findOne({ name });
@@ -116,7 +112,7 @@ app.post("/participants", async (req, res) => {
 });
 
 // POST /messages
-app.post("/messages", async (req, res) => {
+app.post("/messages", (req, res) => {
   const { to, text, type } = req.body;
   const from = req.header("User");
 
@@ -138,30 +134,35 @@ app.post("/messages", async (req, res) => {
       .json({ error: "Campo 'User' não está presente no header." });
   }
 
-  // Sanitiza o texto da mensagem
-  const sanitizedText = sanitizeMessageText(text);
+  participantsCollection
+    .findOne({ name: from })
+    .then((participant) => {
+      if (!participant) {
+        return res.status(422).json({ error: "Usuário não cadastrado." });
+      }
 
-  try {
-    const participant = await participantsCollection.findOne({ name: from });
-    if (!participant) {
-      return res.status(422).json({ error: "Usuário não cadastrado." });
-    }
+      const newMessage = {
+        from,
+        to,
+        text,
+        type,
+        time: dayjs().format("HH:mm:ss"),
+      };
 
-    const newMessage = {
-      from,
-      to,
-      text: sanitizedText,
-      type,
-      time: dayjs().format("HH:mm:ss"),
-    };
-
-    await messagesCollection.insertOne(newMessage);
-
-    return res.status(201).json(newMessage);
-  } catch (err) {
-    console.error("Error creating message:", err);
-    return res.status(500).json({ error: "Erro ao criar mensagem." });
-  }
+      messagesCollection
+        .insertOne(newMessage)
+        .then(() => {
+          return res.status(201).json(newMessage);
+        })
+        .catch((err) => {
+          console.error("Error creating message:", err);
+          return res.status(500).json({ error: "Erro ao criar mensagem." });
+        });
+    })
+    .catch((err) => {
+      console.error("Error finding participant:", err);
+      return res.status(500).json({ error: "Erro ao buscar participante." });
+    });
 });
 
 // GET /participants
@@ -315,15 +316,11 @@ app.delete("/messages/:messageId", (req, res) => {
     });
 });
 
-/// PUT /messages/:messageId
+// PUT /messages/:messageId
 app.put("/messages/:messageId", (req, res) => {
   const messageId = req.params.messageId;
   const { to, text, type } = req.body;
   const from = req.header("User");
-
-  // Para que serve tantos códigos?
-  // Se a vida não é programada
-  // e as melhores coisas da vida não tem lógica
 
   const schema = Joi.object({
     to: Joi.string().trim().required(),
